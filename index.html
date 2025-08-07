@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>AI Chatbot with Real Voice</title>
+<style>
+  body { font-family: Arial, sans-serif; max-width: 600px; margin: 20px auto; }
+  #chatbox { border: 1px solid #ccc; height: 400px; overflow-y: scroll; padding: 10px; }
+  #userInput { width: 100%; padding: 10px; font-size: 16px; margin-top: 10px; }
+  #voiceBtn { margin-top: 10px; }
+  .message { margin: 10px 0; }
+  .user { text-align: right; color: blue; }
+  .bot { text-align: left; color: green; }
+</style>
+</head>
+<body>
+
+<h1>AI Chatbot with Natural Voice</h1>
+<div id="chatbox"></div>
+
+<input id="userInput" placeholder="Type your question or say it!" autocomplete="off" />
+<button id="voiceBtn">🎙️ Speak</button>
+
+<script>
+  const chatbox = document.getElementById('chatbox');
+  const userInput = document.getElementById('userInput');
+  const voiceBtn = document.getElementById('voiceBtn');
+
+  const userId = 'user-' + Math.floor(Math.random() * 10000);
+
+  function appendMessage(text, sender) {
+    const msg = document.createElement('div');
+    msg.className = 'message ' + sender;
+    msg.textContent = text;
+    chatbox.appendChild(msg);
+    chatbox.scrollTop = chatbox.scrollHeight;
+  }
+
+  async function sendMessage(message) {
+    appendMessage(message, 'user');
+    userInput.value = '';
+    appendMessage('Typing...', 'bot');
+
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, message })
+      });
+      const data = await response.json();
+
+      // Remove "Typing..."
+      const typing = Array.from(chatbox.children).find(
+        el => el.classList.contains('bot') && el.textContent === 'Typing...'
+      );
+      if (typing) typing.remove();
+
+      appendMessage(data.reply, 'bot');
+
+      if (data.audio) {
+        const audio = new Audio(data.audio);
+        audio.play().catch(e => {
+          console.error('Audio playback failed:', e);
+          speakFallback(data.reply);
+        });
+      } else {
+        speakFallback(data.reply);
+      }
+    } catch (err) {
+      appendMessage('Sorry, something went wrong.', 'bot');
+    }
+  }
+
+  function speakFallback(text) {
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = /[\u4e00-\u9fff]/.test(text) ? 'zh-CN' : 'en-US';
+    speechSynthesis.speak(utter);
+  }
+
+  userInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && userInput.value.trim()) {
+      sendMessage(userInput.value.trim());
+    }
+  });
+
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    voiceBtn.disabled = true;
+    voiceBtn.textContent = '🎙️ Voice not supported';
+  } else {
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'zh-CN';
+    recognition.interimResults = false;
+
+    recognition.onresult = event => {
+      const transcript = event.results[0][0].transcript;
+      userInput.value = transcript;
+      sendMessage(transcript);
+    };
+
+    recognition.onerror = () => {
+      appendMessage('Voice recognition error.', 'bot');
+    };
+
+    voiceBtn.onclick = () => {
+      recognition.start();
+    };
+  }
+</script>
+
+</body>
+</html>
